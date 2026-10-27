@@ -51,6 +51,10 @@ class Prefs(ctx: Context) {
     var lastBt: String?
         get() = sp.getString("lastBt", null)
         set(v) = sp.edit().putString("lastBt", v).apply()
+    /** The car's Bluetooth name from the pairing QR, used to find its address when the QR had none. */
+    var carBtName: String?
+        get() = sp.getString("carBtName", null)
+        set(v) = sp.edit().putString("carBtName", v).apply()
     var relaySince: String
         get() = sp.getString("relaySince", "12h") ?: "12h"
         set(v) = sp.edit().putString("relaySince", v).apply()

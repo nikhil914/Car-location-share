@@ -96,8 +96,10 @@ class Sender(ctx: Context) {
             ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) return "Bluetooth permission not granted (open Send to Car once)"
         if (!adapter.isEnabled) return "Bluetooth is off"
-        val devices = adapter.bondedDevices.orEmpty().sortedByDescending { it.address == prefs.lastBt }
-        if (devices.isEmpty()) return "no paired devices"
+        // The car from the pairing QR first (no system pairing needed for an insecure socket), then paired devices.
+        val known = prefs.lastBt?.let { mac -> try { adapter.getRemoteDevice(mac) } catch (e: Exception) { null } }
+        val devices = (listOfNotNull(known) + adapter.bondedDevices.orEmpty().filter { it.address != prefs.lastBt })
+        if (devices.isEmpty()) return "no paired devices and no car address from the QR"
         adapter.cancelDiscovery()
         for (d in devices) {
             progress("trying ${d.name}…")

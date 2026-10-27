@@ -44,12 +44,15 @@ object Inbox {
         return "ok"
     }
 
+    fun cardIntent(ctx: Context, place: Place, via: String): Intent = Intent(ctx, TakeoverActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        .putExtra("lat", place.lat ?: Double.NaN).putExtra("lon", place.lon ?: Double.NaN)
+        .putExtra("name", place.name).putExtra("q", place.query).putExtra("via", via)
+
+    /** Notification first (works on any Android), then the direct pop-up (works on the 8.1 unit). */
     fun show(ctx: Context, place: Place, via: String) {
-        val i = Intent(ctx, TakeoverActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra("lat", place.lat ?: Double.NaN).putExtra("lon", place.lon ?: Double.NaN)
-            .putExtra("name", place.name).putExtra("q", place.query).putExtra("via", via)
-        try { ctx.startActivity(i); ProbeLog.i("Pop-up requested ($via)") }
+        Alerts.place(ctx, place, via)
+        try { ctx.startActivity(cardIntent(ctx, place, via)); ProbeLog.i("Pop-up requested ($via)") }
         catch (e: Exception) { ProbeLog.i("Pop-up refused ($via): $e") }
     }
 
@@ -83,6 +86,15 @@ object Waze {
         "installed, version " + ctx.packageManager.getPackageInfo("com.waze", 0).versionName
     } catch (e: Exception) { "NOT installed" }
 
+    fun geoUri(p: Place): Uri = Uri.parse(
+        if (p.hasCoords) "geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${Uri.encode(p.name)})"
+        else "geo:0,0?q=${Uri.encode(p.query ?: p.name)}"
+    )
+
+    /** "Other app": lets you pick any installed map app (Google Maps, a car launcher's nav…). */
+    fun otherAppIntent(p: Place): Intent =
+        Intent.createChooser(Intent(Intent.ACTION_VIEW, geoUri(p)), "Navigate with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
     /** Opens Waze navigating to the place; falls back to any map app through geo:. */
     fun navigate(ctx: Context, p: Place): String {
         val waze = if (p.hasCoords) "waze://?ll=${p.lat},${p.lon}&navigate=yes"
@@ -92,10 +104,9 @@ object Waze {
             ProbeLog.i("Opened Waze: $waze")
             return "Waze"
         } catch (e: ActivityNotFoundException) { ProbeLog.i("Waze link not handled, trying geo:") }
-        val geo = if (p.hasCoords) "geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${Uri.encode(p.name)})"
-        else "geo:0,0?q=${Uri.encode(p.query ?: p.name)}"
+        val geo = geoUri(p)
         return try {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(geo)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, geo).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             ProbeLog.i("Opened map app: $geo"); "map app"
         } catch (e: ActivityNotFoundException) { ProbeLog.i("No app opens geo: links"); "nothing" }
     }
@@ -139,6 +150,8 @@ class TakeoverActivity : Activity() {
         val via = i.getStringExtra("via").orEmpty()
         Inbox.lastShown = "shown ${java.text.DateFormat.getTimeInstance().format(java.util.Date())} ($via)"
         ProbeLog.i("Pop-up SHOWN on screen ($via)")
+        Alerts.clear(this)
+        if (i.getBooleanExtra(EXTRA_GO_NOW, false)) { done = false; go(); return }
 
         val prefs = Prefs(this)
         val col = LinearLayout(this).apply {
@@ -160,6 +173,11 @@ class TakeoverActivity : Activity() {
             text = label; textSize = 26f; setPadding(64, 32, 64, 32); setOnClickListener { onClick() }
         }
         row.addView(big("Go") { go() })
+        row.addView(big("Other app") {
+            done = true; handler.removeCallbacks(tick)
+            try { startActivity(Waze.otherAppIntent(place)) } catch (e: Exception) { ProbeLog.i("No other map app: $e") }
+            finish()
+        })
         row.addView(big("Cancel") { done = true; handler.removeCallbacks(tick); ProbeLog.i("Pop-up cancelled"); finish() })
         col.addView(row)
         setContentView(col)
@@ -179,5 +197,9 @@ class TakeoverActivity : Activity() {
     override fun onDestroy() {
         handler.removeCallbacks(tick)
         super.onDestroy()
+    }
+
+    companion object {
+        const val EXTRA_GO_NOW = "goNow"
     }
 }

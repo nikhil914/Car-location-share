@@ -13,6 +13,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Phone side: finds the car's Bluetooth by the name in the pairing QR. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Car side: reads files that arrive by Bluetooth file transfer. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
@@ -41,6 +46,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Pairing QR: sendtocar://pair?c=… (opens from the camera app too). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sendtocar" android:host="pair" />
             </intent-filter>
         </activity>
 
@@ -72,6 +84,9 @@
             android:launchMode="singleTask"
             android:taskAffinity="com.nik.sendtocar.takeover"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+        <!-- Downloads Google's QR scanner module at install instead of on first use. -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
 
         <service
             android:name=".CarService"
