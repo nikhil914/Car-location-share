@@ -3,8 +3,15 @@
 Share a place on your phone, and Waze on the car's head unit starts navigating to it.
 Built for an FYT UIS8141E unit (Android 8.1) whose notification shade shows no notifications.
 
-One APK runs on both devices. On first launch, pick **car** or **phone**, then type the car's
-8-character pairing code into the phone.
+One APK runs on both devices. On first launch, pick **car** on the head unit. On the phone, tap
+**Scan the car's QR code to pair** (or scan the car's QR with the camera app). The phone saves the
+car's code, IP address and Bluetooth identity, then tests every channel. Typing the 8-character
+code by hand also works.
+
+When a place arrives, the car shows a notification and opens a full-screen "Navigate to" card
+directly. On the FYT unit the card is what you see, since its shade shows no notifications. On
+newer Android, which blocks pop-ups from the background, the notification is the way in. Both
+offer **Navigate (Waze)** and **Other app** (pick any installed map app).
 
 ## Install and update with Obtainium
 

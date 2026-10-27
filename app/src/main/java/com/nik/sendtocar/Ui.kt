@@ -18,6 +18,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 /** Plain-View helpers: the probe needs no AndroidX, so it stays tiny and installs on any unit. */
 private fun Activity.dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -39,6 +43,8 @@ class MainActivity : Activity() {
     private var statusView: TextView? = null
     private var logView: TextView? = null
     private var sendView: TextView? = null
+    private var qrView: ImageView? = null
+    private var qrShown = ""
     private val handler = Handler(Looper.getMainLooper())
     private val refresher = object : Runnable {
         override fun run() { refresh(); handler.postDelayed(this, 2000) }
@@ -50,7 +56,46 @@ class MainActivity : Activity() {
         prefs = Prefs(this)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)) }
         setContentView(ScrollView(this).apply { addView(root) })
+        if (!handlePairLink(intent)) build()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handlePairLink(intent)
+    }
+
+    /** sendtocar://pair links, from the phone's camera app or our own scanner. */
+    private fun handlePairLink(i: Intent?): Boolean {
+        val link = i?.dataString ?: return false
+        val summary = Pairing.apply(this, link) ?: return false
+        Toast.makeText(this, summary, Toast.LENGTH_LONG).show()
         build()
+        afterPairing()
+        return true
+    }
+
+    private fun afterPairing() {
+        sendView?.text = "Paired. Looking for the car on Bluetooth and testing every channel…"
+        Pairing.findCarBluetooth(this) { status ->
+            ProbeLog.i("Car Bluetooth: $status")
+            if (!status.startsWith("scanning")) runOnUiThread { send(Msg.ping(prefs.phoneCode)) }
+        }
+    }
+
+    private fun scanQr() {
+        val opts = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+        try {
+            GmsBarcodeScanning.getClient(this, opts).startScan()
+                .addOnSuccessListener { code ->
+                    val raw = code.rawValue.orEmpty()
+                    if (Pairing.apply(this, raw) == null) Toast.makeText(this, "That isn't a Send to Car QR", Toast.LENGTH_LONG).show()
+                    else { build(); afterPairing() }
+                }
+                .addOnFailureListener { e ->
+                    ProbeLog.i("QR scanner unavailable: $e")
+                    Toast.makeText(this, "Scanner unavailable. Scan the QR with the camera app instead.", Toast.LENGTH_LONG).show()
+                }
+        } catch (e: Exception) { ProbeLog.i("QR scanner failed: $e") }
     }
 
     override fun onResume() {
@@ -67,7 +112,7 @@ class MainActivity : Activity() {
 
     private fun build() {
         root.removeAllViews()
-        statusView = null; logView = null; sendView = null
+        statusView = null; logView = null; sendView = null; qrView = null; qrShown = ""
         when (prefs.role) {
             Prefs.CAR -> buildCar()
             Prefs.PHONE -> buildPhone()
@@ -84,12 +129,15 @@ class MainActivity : Activity() {
 
     private fun buildCar() {
         CarService.start(this)
-        if (Build.VERSION.SDK_INT in 23..32 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 1)
-        }
+        val wanted = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT in 23..32) wanted += Manifest.permission.READ_EXTERNAL_STORAGE
+        if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
+        wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.takeIf { it.isNotEmpty() }
+            ?.let { requestPermissions(it.toTypedArray(), 1) }
         root.label("Send to Car: car mode (probe ${BuildConfig.VERSION_NAME})", 22f, true)
-        root.label("Pairing code: ${Prefs.pretty(prefs.carCode)}", 30f, true)
-        root.label("Type this code into the app on your phone.")
+        root.label("Scan this with the Send to Car app on your phone", 18f, true)
+        qrView = ImageView(this).also { root.addView(it) }
+        root.label("Pairing code: ${Prefs.pretty(prefs.carCode)} (or type it in on the phone)", 18f)
         statusView = root.label("", 14f)
 
         root.label("Tests", 20f, true)
@@ -128,11 +176,14 @@ class MainActivity : Activity() {
     private fun countdownLabel() = "Countdown: ${prefs.countdown} s"
 
     private fun buildPhone() {
-        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 2)
-        }
+        val wanted = if (Build.VERSION.SDK_INT >= 31) listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
+        else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.takeIf { it.isNotEmpty() }
+            ?.let { requestPermissions(it.toTypedArray(), 2) }
         root.label("Send to Car: phone mode (probe ${BuildConfig.VERSION_NAME})", 22f, true)
-        root.label("Car pairing code (shown on the car screen):")
+        root.label(if (prefs.phoneCode.length == 8) "Paired with car ${Prefs.pretty(prefs.phoneCode)}" else "Not paired yet", 18f, true)
+        root.button("Scan the car's QR code to pair") { scanQr() }
+        root.label("Or type the car's pairing code:")
         val codeIn = EditText(this).apply {
             setText(Prefs.pretty(prefs.phoneCode)); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
         }
@@ -178,6 +229,14 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         statusView?.text = Report.status(this).joinToString("\n")
+        qrView?.let { v ->
+            val link = Pairing.carUri(this)
+            if (link != qrShown) {
+                qrShown = link
+                val size = (minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels) * 0.45).toInt()
+                v.setImageBitmap(Report.qr(link, size))
+            }
+        }
         refreshLog()
     }
 

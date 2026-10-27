@@ -15,8 +15,8 @@ android {
         targetSdk = 34
         // Bump both for every release: CI publishes v<versionName> when that tag doesn't exist yet,
         // and Obtainium updates from those releases.
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
     }
 
     // Release key comes from CI secrets (SIGNING_KEYSTORE_BASE64 / SIGNING_PASSWORD), never from git.
@@ -51,5 +51,7 @@ android {
 dependencies {
     // QR codes for the diagnostics report.
     implementation("com.google.zxing:core:3.5.3")
+    // Phone side: Google's QR scanner (no camera permission; needs Play services, which phones have).
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     testImplementation("junit:junit:4.13.2")
 }
