@@ -25,6 +25,7 @@ object Inbox {
     private val seen = LinkedHashSet<String>()
 
     @Volatile var lastShown = "never"
+    @Volatile var lastShownAt = 0L
 
     @Synchronized
     fun handle(ctx: Context, body: String, via: String): String {
@@ -49,11 +50,17 @@ object Inbox {
         .putExtra("lat", place.lat ?: Double.NaN).putExtra("lon", place.lon ?: Double.NaN)
         .putExtra("name", place.name).putExtra("q", place.query).putExtra("via", via)
 
-    /** Notification first (works on any Android), then the direct pop-up (works on the 8.1 unit). */
+    /**
+     * Three ways to the screen: the notification, the direct card (works on the 8.1 unit, and on
+     * Android 10+ once "Display over other apps" is allowed), and a floating banner if the card
+     * still didn't appear.
+     */
     fun show(ctx: Context, place: Place, via: String) {
         Alerts.place(ctx, place, via)
+        val at = System.currentTimeMillis()
         try { ctx.startActivity(cardIntent(ctx, place, via)); ProbeLog.i("Pop-up requested ($via)") }
         catch (e: Exception) { ProbeLog.i("Pop-up refused ($via): $e") }
+        Overlay.fallbackIfCardMissing(ctx, place, via, at)
     }
 
     /** Fallback channel: a place sent as a file over Bluetooth file transfer. Reads the newest one. */
@@ -149,6 +156,8 @@ class TakeoverActivity : Activity() {
         place = Place(lat.takeUnless { it.isNaN() }, lon.takeUnless { it.isNaN() }, i.getStringExtra("name").orEmpty(), i.getStringExtra("q"))
         val via = i.getStringExtra("via").orEmpty()
         Inbox.lastShown = "shown ${java.text.DateFormat.getTimeInstance().format(java.util.Date())} ($via)"
+        Inbox.lastShownAt = System.currentTimeMillis()
+        Overlay.dismiss(this)
         ProbeLog.i("Pop-up SHOWN on screen ($via)")
         Alerts.clear(this)
         if (i.getBooleanExtra(EXTRA_GO_NOW, false)) { done = false; go(); return }

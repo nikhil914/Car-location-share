@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private var sendView: TextView? = null
     private var qrView: ImageView? = null
     private var qrShown = ""
+    private var overlayButton: Button? = null
     private val handler = Handler(Looper.getMainLooper())
     private val refresher = object : Runnable {
         override fun run() { refresh(); handler.postDelayed(this, 2000) }
@@ -112,7 +113,7 @@ class MainActivity : Activity() {
 
     private fun build() {
         root.removeAllViews()
-        statusView = null; logView = null; sendView = null; qrView = null; qrShown = ""
+        statusView = null; logView = null; sendView = null; qrView = null; qrShown = ""; overlayButton = null
         when (prefs.role) {
             Prefs.CAR -> buildCar()
             Prefs.PHONE -> buildPhone()
@@ -157,6 +158,7 @@ class MainActivity : Activity() {
         }
 
         root.label("Settings", 20f, true)
+        root.button(overlayLabel()) { startActivity(Overlay.settingsIntent(this)) }.also { overlayButton = it }
         root.button(autoLabel()) { b -> prefs.autoGo = !prefs.autoGo; b.text = autoLabel() }
         root.button(countdownLabel()) { b ->
             val opts = listOf(0, 3, 5, 10)
@@ -171,6 +173,9 @@ class MainActivity : Activity() {
         }
         addFooter()
     }
+
+    private fun overlayLabel() = "Open from background (Display over other apps): " +
+        if (Overlay.allowed(this)) "ALLOWED" else "OFF, tap to allow"
 
     private fun autoLabel() = "When a place arrives: " + if (prefs.autoGo) "navigate automatically after the countdown" else "wait for me to tap Go"
     private fun countdownLabel() = "Countdown: ${prefs.countdown} s"
@@ -229,6 +234,7 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         statusView?.text = Report.status(this).joinToString("\n")
+        overlayButton?.text = overlayLabel()
         qrView?.let { v ->
             val link = Pairing.carUri(this)
             if (link != qrShown) {
