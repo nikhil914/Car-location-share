@@ -39,7 +39,14 @@ class CarService : Service() {
     override fun onCreate() {
         super.onCreate()
         ProbeLog.init(this)
-        startForeground(1, notification())
+        try {
+            startForeground(1, notification())
+        } catch (e: Exception) {
+            // Never crash the app over it: log, stop, and let the probe report show why.
+            ProbeLog.i("Receiver could not start in the foreground: $e")
+            stopSelf()
+            return
+        }
         running = true
         startedAt = System.currentTimeMillis()
         val prefs = Prefs(this)

@@ -15,8 +15,8 @@ android {
         targetSdk = 34
         // Bump both for every release: CI publishes v<versionName> when that tag doesn't exist yet,
         // and Obtainium updates from those releases.
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     // Release key comes from CI secrets (SIGNING_KEYSTORE_BASE64 / SIGNING_PASSWORD), never from git.
