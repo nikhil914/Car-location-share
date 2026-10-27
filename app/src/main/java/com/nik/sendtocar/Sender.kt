@@ -180,7 +180,7 @@ object Report {
             out += "Wi-Fi server: ${CarService.wifiState}"
             out += "Bluetooth server: ${CarService.btState}"
             out += "Internet relay: ${CarService.relayState}"
-            out += "Pop-up: ${Inbox.lastShown}"
+            out += "Pop-up: ${Inbox.lastShown}; display over other apps: ${if (Overlay.allowed(ctx)) "allowed" else "off"}"
         }
         return out
     }
