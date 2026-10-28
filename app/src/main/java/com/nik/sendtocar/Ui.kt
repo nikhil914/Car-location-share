@@ -35,6 +35,8 @@ private fun LinearLayout.label(s: String, size: Float = 16f, bold: Boolean = fal
 private fun LinearLayout.button(s: String, onClick: (Button) -> Unit): Button =
     Button(context).apply { text = s; isAllCaps = false; setOnClickListener { onClick(this) } }.also { addView(it) }
 
+const val MAPS_PACKAGE = "com.google.android.apps.maps"
+
 private fun bg(f: () -> Unit) = Thread { try { f() } catch (e: Exception) { ProbeLog.i("Error: $e") } }.start()
 
 class MainActivity : Activity() {
@@ -195,6 +197,19 @@ class MainActivity : Activity() {
         root.addView(codeIn)
         root.button("Save code") { prefs.phoneCode = codeIn.text.toString(); codeIn.setText(Prefs.pretty(prefs.phoneCode)); ProbeLog.i("Code saved") }
         root.label("To send a place: in Google Maps, WhatsApp or Waze tap Share → Send to car.", 14f)
+        root.button("Send the copied link or address") {
+            val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
+            val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+            if (text.isBlank()) Toast.makeText(this, "Nothing copied. Long-press a link and copy it first.", Toast.LENGTH_LONG).show()
+            else startActivity(Intent(this, ShareActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text))
+        }
+        root.label("Tapped Google Maps links open in Maps. To send them here instead:", 14f)
+        root.button("1. Google Maps → Open by default → turn OFF \"Open supported links\"") {
+            openAppLinkSettings(MAPS_PACKAGE)
+        }
+        root.button("2. Send to Car → Open by default → Add links (tick them all)") {
+            openAppLinkSettings(packageName)
+        }
 
         root.label("Tests", 20f, true)
         root.button("1. Ping the car on all channels") { send(Msg.ping(prefs.phoneCode)) }
@@ -264,6 +279,15 @@ class MainActivity : Activity() {
         d.show()
     }
 
+    private fun openAppLinkSettings(pkg: String) {
+        val uri = android.net.Uri.parse("package:$pkg")
+        val i = if (Build.VERSION.SDK_INT >= 31) Intent(android.provider.Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, uri)
+        else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri)
+        try { startActivity(i) } catch (e: Exception) {
+            startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+        }
+    }
+
     private fun shareText(title: String, text: String) {
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
             .putExtra(Intent.EXTRA_SUBJECT, title).putExtra(Intent.EXTRA_TEXT, text), title))
@@ -281,6 +305,16 @@ class ShareActivity : Activity() {
         val what = col.label("Reading the place…", 18f, true)
         val status = col.label("", 15f)
         col.button("Close") { finish() }
+        // A tapped map link landed here: keep a way to look at it in Google Maps as before.
+        val tapped = intent.data?.takeIf { intent.action == Intent.ACTION_VIEW && it.scheme?.startsWith("http") == true }
+        if (tapped != null) col.button("Open in Google Maps instead") {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, tapped).setPackage(MAPS_PACKAGE))
+            } catch (e: Exception) {
+                startActivity(Intent(Intent.ACTION_VIEW, tapped).addCategory(Intent.CATEGORY_BROWSABLE).setPackage("com.android.chrome"))
+            }
+            finish()
+        }
 
         if (prefs.phoneCode.length != 8) {
             what.text = "Open Send to Car and enter the car's pairing code first."

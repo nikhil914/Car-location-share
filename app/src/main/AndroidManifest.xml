@@ -76,6 +76,40 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="geo" />
             </intent-filter>
+            <!-- Map links tapped in WhatsApp, browsers… Google Maps claims these too, so Android only
+                 offers us once Maps' "Open supported links" is off and ours are added (see phone screen). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="maps.app.goo.gl" />
+                <data android:host="maps.google.com" />
+                <data android:host="maps.apple.com" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="www.google.com" />
+                <data android:host="google.com" />
+                <data android:host="goo.gl" />
+                <data android:pathPrefix="/maps" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="waze.com" />
+                <data android:host="www.waze.com" />
+                <data android:host="ul.waze.com" />
+                <data android:pathPrefix="/ul" />
+            </intent-filter>
         </activity>
 
         <!-- Car side: the full-screen "Navigate to X?" card, opened from the background service. -->
