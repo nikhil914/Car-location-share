@@ -53,9 +53,11 @@ class CarService : Service() {
         val gap = if (prefs.lastBeat == 0L) "first run" else "last alive ${(System.currentTimeMillis() - prefs.lastBeat) / 60000} min ago"
         ProbeLog.i("Service start: uptime since boot ${SystemClock.elapsedRealtime() / 60000} min, $gap")
         thread("beat") { while (!stopped) { prefs.lastBeat = System.currentTimeMillis(); Thread.sleep(60_000) } }
-        thread("wifi") { wifiLoop() }
-        thread("bt") { btLoop() }
-        thread("relay") { relayLoop() }
+        // A channel turned off in Settings is simply not started; the toggle restarts the service.
+        if (prefs.wifiOn) thread("wifi") { wifiLoop() } else wifiState = OFF
+        if (prefs.btOn) thread("bt") { btLoop() } else btState = OFF
+        if (prefs.relayOn) thread("relay") { relayLoop() } else relayState = OFF
+        CarSignals.start(this)
         Watchdog.arm(this)
     }
 
@@ -229,6 +231,7 @@ class CarService : Service() {
 
     companion object {
         const val ACTION_TEST_POPUP = "com.nik.sendtocar.TEST_POPUP"
+        const val OFF = "off in Settings"
         @Volatile var running = false
         @Volatile var startedAt = 0L
         @Volatile var wifiState = "not started"
@@ -240,6 +243,13 @@ class CarService : Service() {
             try {
                 if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
             } catch (e: Exception) { ProbeLog.i("Service start refused: $e") }
+        }
+
+        /** After a channel setting changed: the old listeners close in onDestroy, new ones start. */
+        fun restart(ctx: Context) {
+            ProbeLog.i("Restarting the receiver for new channel settings")
+            try { ctx.stopService(Intent(ctx, CarService::class.java)) } catch (e: Exception) { }
+            start(ctx)
         }
     }
 }

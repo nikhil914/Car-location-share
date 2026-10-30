@@ -1,20 +1,10 @@
 package com.nik.sendtocar
 
-import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
-import android.os.Bundle
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
-import android.view.Gravity
-import android.view.WindowManager
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
 import java.io.File
 import java.net.URLEncoder
 
@@ -26,12 +16,17 @@ object Inbox {
 
     @Volatile var lastShown = "never"
     @Volatile var lastShownAt = 0L
+    /** Last message from the paired phone (a ping or a place), for the dashboard's status pill. */
+    @Volatile var lastContactAt = 0L
+    @Volatile var lastContactVia = ""
 
     @Synchronized
     fun handle(ctx: Context, body: String, via: String): String {
         val prefs = Prefs(ctx)
         val m = Msg.fromJson(body.trim()) ?: run { ProbeLog.i("Unreadable message via $via"); return "bad" }
         if (m.code != prefs.carCode) { ProbeLog.i("Wrong pairing code via $via"); return "denied" }
+        lastContactAt = System.currentTimeMillis()
+        lastContactVia = via.substringBefore(" from")
         if (m.type == Msg.PING) { ProbeLog.i("Ping via $via"); return "pong" }
         if (m.id in seen || prefs.inbox.any { it.id == m.id }) { ProbeLog.i("Duplicate ignored via $via"); return "dup" }
         seen.add(m.id)
@@ -116,99 +111,5 @@ object Waze {
             ctx.startActivity(Intent(Intent.ACTION_VIEW, geo).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             ProbeLog.i("Opened map app: $geo"); "map app"
         } catch (e: ActivityNotFoundException) { ProbeLog.i("No app opens geo: links"); "nothing" }
-    }
-}
-
-/** The full-screen "Navigate to X?" card. Auto-go after a countdown, or wait for a tap (a setting). */
-class TakeoverActivity : Activity() {
-    private val handler = Handler(Looper.getMainLooper())
-    private lateinit var place: Place
-    private lateinit var countdownView: TextView
-    private var left = 0
-    private var done = false
-
-    private val tick = object : Runnable {
-        override fun run() {
-            if (done) return
-            if (left <= 0) { go(); return }
-            countdownView.text = "Navigating in $left s"
-            left--
-            handler.postDelayed(this, 1000)
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setup(intent)
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        handler.removeCallbacks(tick)
-        done = false
-        setup(intent)
-    }
-
-    private fun setup(i: Intent) {
-        val lat = i.getDoubleExtra("lat", Double.NaN)
-        val lon = i.getDoubleExtra("lon", Double.NaN)
-        place = Place(lat.takeUnless { it.isNaN() }, lon.takeUnless { it.isNaN() }, i.getStringExtra("name").orEmpty(), i.getStringExtra("q"))
-        val via = i.getStringExtra("via").orEmpty()
-        Inbox.lastShown = "shown ${java.text.DateFormat.getTimeInstance().format(java.util.Date())} ($via)"
-        Inbox.lastShownAt = System.currentTimeMillis()
-        Overlay.dismiss(this)
-        ProbeLog.i("Pop-up SHOWN on screen ($via)")
-        Alerts.clear(this)
-        if (i.getBooleanExtra(EXTRA_GO_NOW, false)) { done = false; go(); return }
-
-        val prefs = Prefs(this)
-        val col = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#101418"))
-            setPadding(48, 48, 48, 48)
-        }
-        fun text(s: String, size: Float, color: Int = Color.WHITE) = TextView(this).apply {
-            text = s; textSize = size; setTextColor(color); gravity = Gravity.CENTER; setPadding(0, 12, 0, 12)
-        }
-        col.addView(text("Navigate to", 22f, Color.LTGRAY))
-        col.addView(text(place.label(), 36f))
-        if (place.hasCoords) col.addView(text("%.5f, %.5f".format(place.lat, place.lon), 18f, Color.GRAY))
-        countdownView = text("", 24f, Color.parseColor("#64B5F6"))
-        col.addView(countdownView)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        fun big(label: String, onClick: () -> Unit) = Button(this).apply {
-            text = label; textSize = 26f; setPadding(64, 32, 64, 32); setOnClickListener { onClick() }
-        }
-        row.addView(big("Go") { go() })
-        row.addView(big("Other app") {
-            done = true; handler.removeCallbacks(tick)
-            try { startActivity(Waze.otherAppIntent(place)) } catch (e: Exception) { ProbeLog.i("No other map app: $e") }
-            finish()
-        })
-        row.addView(big("Cancel") { done = true; handler.removeCallbacks(tick); ProbeLog.i("Pop-up cancelled"); finish() })
-        col.addView(row)
-        setContentView(col)
-
-        if (prefs.autoGo) { left = prefs.countdown; handler.post(tick) }
-        else countdownView.text = "Tap Go to navigate"
-    }
-
-    private fun go() {
-        if (done) return
-        done = true
-        handler.removeCallbacks(tick)
-        Waze.navigate(this, place)
-        finish()
-    }
-
-    override fun onDestroy() {
-        handler.removeCallbacks(tick)
-        super.onDestroy()
-    }
-
-    companion object {
-        const val EXTRA_GO_NOW = "goNow"
     }
 }
