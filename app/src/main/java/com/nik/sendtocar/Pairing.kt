@@ -137,7 +137,7 @@ object Alerts {
             .setContentIntent(card)
             .setFullScreenIntent(card, true)
             .setAutoCancel(true)
-            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Navigate (Waze)", go).build())
+            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Navigate (${Nav.label(ctx)})", go).build())
             .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Other app", other).build())
             .build()
         try { nm.notify(ID, n) } catch (e: Exception) { ProbeLog.i("Notification refused: $e") }
