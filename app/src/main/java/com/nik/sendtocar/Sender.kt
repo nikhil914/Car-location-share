@@ -181,6 +181,8 @@ object Report {
             out += "Bluetooth server: ${CarService.btState}"
             out += "Internet relay: ${CarService.relayState}"
             out += "Pop-up: ${Inbox.lastShown}; display over other apps: ${if (Overlay.allowed(ctx)) "allowed" else "off"}"
+            out += "Headlights (FYT): ${CarSignals.headlights?.let { if (it) "on" else "off" } ?: "unknown"}, ${CarSignals.state}"
+            out += "Theme ${Prefs(ctx).theme}, map app ${Prefs(ctx).navEngine}"
         }
         return out
     }

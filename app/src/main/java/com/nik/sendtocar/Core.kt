@@ -62,12 +62,55 @@ class Prefs(ctx: Context) {
         get() = sp.getLong("lastBeat", 0)
         set(v) = sp.edit().putLong("lastBeat", v).apply()
 
+    // ---- Car screens
+
+    var theme: ThemeOption
+        get() = enumOr(sp.getString("theme", null), ThemeOption.CLEAN)
+        set(v) = sp.edit().putString("theme", v.name).apply()
+    var accent: Accent
+        get() = enumOr(sp.getString("accent", null), Accent.CYAN)
+        set(v) = sp.edit().putString("accent", v.name).apply()
+    /** The Auto theme's look by day (night is always true black): CLEAN or DAYLIGHT. */
+    var autoDay: ThemeOption
+        get() = enumOr(sp.getString("autoDay", null), ThemeOption.DAYLIGHT)
+        set(v) = sp.edit().putString("autoDay", v.name).apply()
+    var navEngine: NavEngine
+        get() = enumOr(sp.getString("navEngine", null), NavEngine.WAZE)
+        set(v) = sp.edit().putString("navEngine", v.name).apply()
+    var keepAwake: Boolean
+        get() = sp.getBoolean("keepAwake", false)
+        set(v) = sp.edit().putBoolean("keepAwake", v).apply()
+    /** Receiver channels (all on by default). Changing one restarts the car service. */
+    var wifiOn: Boolean
+        get() = sp.getBoolean("wifiOn", true)
+        set(v) = sp.edit().putBoolean("wifiOn", v).apply()
+    var btOn: Boolean
+        get() = sp.getBoolean("btOn", true)
+        set(v) = sp.edit().putBoolean("btOn", v).apply()
+    var relayOn: Boolean
+        get() = sp.getBoolean("relayOn", true)
+        set(v) = sp.edit().putBoolean("relayOn", v).apply()
+    /** The place whose card was dismissed on the dashboard, so the hero goes back to standby. */
+    var dismissedId: String?
+        get() = sp.getString("dismissedId", null)
+        set(v) = sp.edit().putString("dismissedId", v).apply()
+
+    /** Saved places, newest first, at most 30. */
+    var favorites: List<Msg>
+        get() = msgs("favorites")
+        set(v) = sp.edit().putString("favorites", JSONArray(v.take(30).map { it.toJson() }).toString()).apply()
+
+    private fun msgs(key: String): List<Msg> = try {
+        val a = JSONArray(sp.getString(key, "[]"))
+        (0 until a.length()).mapNotNull { Msg.fromJson(a.getString(it)) }
+    } catch (e: Exception) { emptyList() }
+
+    private inline fun <reified T : Enum<T>> enumOr(name: String?, default: T): T =
+        enumValues<T>().firstOrNull { it.name == name } ?: default
+
     /** Newest first, at most 30 places. */
     var inbox: List<Msg>
-        get() = try {
-            val a = JSONArray(sp.getString("inbox", "[]"))
-            (0 until a.length()).mapNotNull { Msg.fromJson(a.getString(it)) }
-        } catch (e: Exception) { emptyList() }
+        get() = msgs("inbox")
         set(v) = sp.edit().putString("inbox", JSONArray(v.take(30).map { it.toJson() }).toString()).apply()
 
     companion object {

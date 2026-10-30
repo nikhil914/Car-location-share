@@ -9,7 +9,7 @@ car's code, IP address and Bluetooth identity, then tests every channel. Typing 
 code by hand also works.
 
 When a place arrives, the car shows a notification and opens a full-screen "Navigate to" card
-directly. On the FYT unit the card is what you see, since its shade shows no notifications. On
+directly. The map app is Waze unless you pick another in the car's settings. On the FYT unit the card is what you see, since its shade shows no notifications. On
 newer Android, which blocks pop-ups from the background, the notification is the way in. Both
 offer **Navigate (Waze)** and **Other app** (pick any installed map app).
 
@@ -35,8 +35,43 @@ first and ignores the rest.
 
 A place sent as a text file by Bluetooth file transfer can also be read on the car (car test 3).
 
-On the car, a full-screen "Navigate to" card opens. It either starts Waze after a countdown or
-waits for you to tap Go, depending on the setting.
+On the car, a full-screen "Navigate to" card opens. It either starts navigation after a countdown
+or waits for you to tap, depending on the setting.
+
+## The car screens
+
+The car side is Jetpack Compose (it runs on the Android 8.1 unit) with three surfaces:
+
+- **Dashboard**, the driving screen: a status pill (receiver state, the car's Wi-Fi IP, which
+  channels are up, when the phone was last heard; tap it for details), the place that just arrived
+  with a large **Start navigation** button plus Copy coords / Save / Dismiss, and the last places as
+  one-tap chips (a bottom row, or a side rail on screens wider than 2:1).
+- **Destinations**: received places with time and coordinates, saved places, and Clear.
+- **Settings**: Display (theme, accent, keep screen on), Receiver (turn Wi-Fi, Bluetooth or the
+  internet relay on or off, Display over other apps), Navigation (countdown or wait, the map app:
+  Waze, Google Maps, OsmAnd, Sygic or ask every time) and Pairing & debug (pairing QR, status,
+  the probe tests, log, role switch).
+
+Touch targets are at least 56 dp (64 dp for most buttons, 76 dp for Start navigation) with 16 dp
+gaps, and nothing on the dashboard scrolls.
+
+### Themes
+
+| Theme | Look |
+| --- | --- |
+| Clean (default) | Charcoal `#121316`, borders `#26282E`, text `#EDEDED`, cyan or orange accent on Start navigation only |
+| True black | `#000000`, dim slate text, dark amber button: keeps night vision |
+| Daylight | `#F4F5F7`, text `#111113`, cobalt `#0047B3` |
+| Auto | True black at night, Clean or Daylight by day |
+
+Auto decides night by the best signal the unit has: the headlights (FYT `com.syu.ms` illumination
+wire, as in CarRadio), then the system night mode, then the light sensor, then sunset to sunrise
+at the car's GPS position (Abu Dhabi until it has a fix).
+
+To add a theme, add a `Palette` in `Palettes.kt` and a `ThemeOption` that returns it from
+`Palettes.of`. `PaletteTest` checks every palette: primary text and the Start navigation label
+must reach 7:1 contrast (WCAG AAA) and muted text 4.5:1. The icons are Material icons inlined in
+`Icons.kt`.
 
 ## 0.1.x is a probe
 
