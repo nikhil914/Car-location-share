@@ -15,6 +15,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Phone side: finds the car's Bluetooth by the name in the pairing QR. -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <!-- Phone (Android ≤ 11): Bluetooth discovery. Car: distance to the place and sunset time. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -26,6 +27,14 @@
 
     <queries>
         <package android:name="com.waze" />
+        <!-- Map-app picker in the car settings. -->
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="net.osmand" />
+        <package android:name="net.osmand.plus" />
+        <package android:name="com.sygic.aura" />
+        <!-- FYT head-unit service: headlight state for the Auto theme. -->
+        <package android:name="com.syu.ms" />
+        <package android:name="com.syu.ss" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="geo" />
@@ -36,7 +45,7 @@
     <application
         android:name=".App"
         android:allowBackup="false"
-        android:icon="@drawable/ic_send_car"
+        android:icon="@mipmap/ic_launcher"
         android:label="Send to Car"
         android:theme="@android:style/Theme.Material"
         android:usesCleartextTraffic="true">

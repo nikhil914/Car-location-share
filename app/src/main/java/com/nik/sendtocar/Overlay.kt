@@ -2,7 +2,6 @@ package com.nik.sendtocar
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
@@ -50,17 +49,28 @@ object Overlay {
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT, type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP }
+        // Same colours as the car screens (Auto counts as night only with the headlights on).
+        val pal = CarLook.palette(ctx)
         val view = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#E6101418"))
+            setBackgroundColor(pal.surface.toInt())
             setPadding(32, 24, 32, 24)
             addView(TextView(ctx).apply {
-                text = "Navigate to ${place.label()}?"; textSize = 22f; setTextColor(Color.WHITE)
+                text = "Navigate to ${place.label()}?"; textSize = 22f; setTextColor(pal.text.toInt())
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
-            addView(Button(ctx).apply { text = "Go"; textSize = 20f; setOnClickListener { dismiss(ctx); Alerts.clear(ctx); Waze.navigate(ctx, place) } })
-            addView(Button(ctx).apply { text = "✕"; textSize = 20f; setOnClickListener { dismiss(ctx) } })
+            addView(Button(ctx).apply {
+                text = "Go"; textSize = 20f; setTextColor(pal.onAccent.toInt()); setBackgroundColor(pal.accent.toInt())
+                minHeight = (64 * resources.displayMetrics.density).toInt(); minWidth = (120 * resources.displayMetrics.density).toInt()
+                setOnClickListener { dismiss(ctx); Alerts.clear(ctx); Nav.navigate(ctx, place) }
+            })
+            addView(Button(ctx).apply {
+                text = "✕"; textSize = 20f; setTextColor(pal.text.toInt()); setBackgroundColor(pal.raised.toInt())
+                minHeight = (64 * resources.displayMetrics.density).toInt(); minWidth = (64 * resources.displayMetrics.density).toInt()
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = (16 * resources.displayMetrics.density).toInt() }
+                setOnClickListener { dismiss(ctx) }
+            })
         }
         try { wm.addView(view, lp); banner = view } catch (e: Exception) { ProbeLog.i("Floating banner refused: $e") }
         main.postDelayed({ dismiss(ctx) }, 120_000)

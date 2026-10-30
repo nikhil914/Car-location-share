@@ -19,11 +19,13 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
-/** Plain-View helpers: the probe needs no AndroidX, so it stays tiny and installs on any unit. */
+/** Plain-View helpers for the phone screens. The car screens are Compose (CarUi.kt). */
 private fun Activity.dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
 private fun LinearLayout.label(s: String, size: Float = 16f, bold: Boolean = false): TextView =
@@ -39,15 +41,14 @@ const val MAPS_PACKAGE = "com.google.android.apps.maps"
 
 private fun bg(f: () -> Unit) = Thread { try { f() } catch (e: Exception) { ProbeLog.i("Error: $e") } }.start()
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     private lateinit var prefs: Prefs
     private lateinit var root: LinearLayout
+    private lateinit var scroll: ScrollView
+    private var carModel: CarModel? = null
     private var statusView: TextView? = null
     private var logView: TextView? = null
     private var sendView: TextView? = null
-    private var qrView: ImageView? = null
-    private var qrShown = ""
-    private var overlayButton: Button? = null
     private val handler = Handler(Looper.getMainLooper())
     private val refresher = object : Runnable {
         override fun run() { refresh(); handler.postDelayed(this, 2000) }
@@ -58,7 +59,8 @@ class MainActivity : Activity() {
         ProbeLog.init(this)
         prefs = Prefs(this)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)) }
-        setContentView(ScrollView(this).apply { addView(root) })
+        scroll = ScrollView(this).apply { addView(root) }
+        setContentView(scroll)
         if (!handlePairLink(intent)) build()
     }
 
@@ -105,17 +107,23 @@ class MainActivity : Activity() {
         super.onResume()
         ProbeLog.listener = { refreshLog() }
         handler.post(refresher)
+        carModel?.resume()
     }
 
     override fun onPause() {
         ProbeLog.listener = null
         handler.removeCallbacks(refresher)
+        carModel?.pause()
         super.onPause()
     }
 
     private fun build() {
         root.removeAllViews()
-        statusView = null; logView = null; sendView = null; qrView = null; qrShown = ""; overlayButton = null
+        statusView = null; logView = null; sendView = null
+        if (prefs.role == Prefs.CAR) { buildCar(); return }
+        carModel?.pause(); carModel = null
+        actionBar?.show()
+        if (scroll.parent == null) setContentView(scroll)
         when (prefs.role) {
             Prefs.CAR -> buildCar()
             Prefs.PHONE -> buildPhone()
@@ -134,53 +142,30 @@ class MainActivity : Activity() {
         CarService.start(this)
         val wanted = mutableListOf<String>()
         if (Build.VERSION.SDK_INT in 23..32) wanted += Manifest.permission.READ_EXTERNAL_STORAGE
+        // Distance and bearing to the place on the dashboard, and the sunset time for the Auto theme.
+        if (Build.VERSION.SDK_INT <= 30) wanted += Manifest.permission.ACCESS_FINE_LOCATION
         if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
         wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.takeIf { it.isNotEmpty() }
             ?.let { requestPermissions(it.toTypedArray(), 1) }
-        root.label("Send to Car: car mode (probe ${BuildConfig.VERSION_NAME})", 22f, true)
-        root.label("Scan this with the Send to Car app on your phone", 18f, true)
-        qrView = ImageView(this).also { root.addView(it) }
-        root.label("Pairing code: ${Prefs.pretty(prefs.carCode)} (or type it in on the phone)", 18f)
-        statusView = root.label("", 14f)
-
-        root.label("Tests", 20f, true)
-        root.button("1. Pop-up test: opens the card in 15 s. Switch to Waze right after tapping") {
-            CarService.start(this, CarService.ACTION_TEST_POPUP)
-        }
-        root.button("2. Open Waze now to a test place") {
-            Waze.navigate(this, Place(24.4615, 54.3172, "Emirates Palace"))
-        }
-        root.button("3. Read the newest file received by Bluetooth") { b ->
-            b.text = "3. " + Inbox.checkBluetoothFiles(this)
-        }
-        root.button("4. Show report as QR codes") { showQr() }
-        root.button("5. Send report to the phone (internet)") { b ->
-            b.text = "5. Sending…"
-            bg { val r = Report.sendToPhone(this); runOnUiThread { b.text = "5. Report: $r" } }
-        }
-
-        root.label("Settings", 20f, true)
-        root.button(overlayLabel()) { startActivity(Overlay.settingsIntent(this)) }.also { overlayButton = it }
-        root.button(autoLabel()) { b -> prefs.autoGo = !prefs.autoGo; b.text = autoLabel() }
-        root.button(countdownLabel()) { b ->
-            val opts = listOf(0, 3, 5, 10)
-            prefs.countdown = opts[(opts.indexOf(prefs.countdown) + 1) % opts.size]
-            b.text = countdownLabel()
-        }
-
-        val inbox = prefs.inbox
-        if (inbox.isNotEmpty()) {
-            root.label("Recent places", 20f, true)
-            inbox.take(6).forEach { m -> m.place?.let { p -> root.button("Navigate: ${p.label()}") { Waze.navigate(this, p) } } }
-        }
-        addFooter()
+        actionBar?.hide()
+        val model = carModel ?: CarModel(this).also { carModel = it }
+        val actions = CarActions(
+            testPopup = { CarService.start(this, CarService.ACTION_TEST_POPUP) },
+            readBluetoothFile = { Inbox.checkBluetoothFiles(this) },
+            showReportQr = { showQr() },
+            sendReport = { done -> bg { val r = Report.sendToPhone(this); runOnUiThread { done(r) } } },
+            openOverlaySettings = { startActivity(Overlay.settingsIntent(this)) },
+            switchRole = { prefs.role = null; build() },
+        )
+        setContent { CarApp(model, actions) }
+        model.resume()
     }
 
-    private fun overlayLabel() = "Open from background (Display over other apps): " +
-        if (Overlay.allowed(this)) "ALLOWED" else "OFF, tap to allow"
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        carModel?.let { it.pause(); it.resume() }
+    }
 
-    private fun autoLabel() = "When a place arrives: " + if (prefs.autoGo) "navigate automatically after the countdown" else "wait for me to tap Go"
-    private fun countdownLabel() = "Countdown: ${prefs.countdown} s"
 
     private fun buildPhone() {
         val wanted = if (Build.VERSION.SDK_INT >= 31) listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
@@ -249,15 +234,6 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         statusView?.text = Report.status(this).joinToString("\n")
-        overlayButton?.text = overlayLabel()
-        qrView?.let { v ->
-            val link = Pairing.carUri(this)
-            if (link != qrShown) {
-                qrShown = link
-                val size = (minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels) * 0.45).toInt()
-                v.setImageBitmap(Report.qr(link, size))
-            }
-        }
         refreshLog()
     }
 

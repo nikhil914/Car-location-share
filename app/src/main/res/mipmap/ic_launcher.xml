@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon before Android 8 (no adaptive icons): the dark squircle drawn in. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="72" android:viewportHeight="72">
+    <group android:translateX="-18" android:translateY="-18">
+        <clip-path android:pathData="M40,20 h28 c14,0 20,6 20,20 v28 c0,14 -6,20 -20,20 h-28 c-14,0 -20,-6 -20,-20 v-28 c0,-14 6,-20 20,-20 Z" />
+        <path android:fillColor="#0F1015" android:pathData="M18,18 h72 v72 h-72 Z" />
+    <path android:fillColor="#1C1F27" android:pathData="M34,92 L74,92 L55.6,64 L52.4,64 Z" />
+    <path android:strokeColor="#4A5060" android:strokeWidth="1.6" android:pathData="M34,92 L52.4,64 M74,92 L55.6,64" />
+    <path android:fillColor="#7C8190" android:pathData="M53.1,82 h1.8 v6 h-1.8z M53.4,72.5 h1.2 v4 h-1.2z M53.7,66.5 h0.6 v2.2 h-0.6z" />
+    <path android:strokeColor="#2C303B" android:strokeWidth="1.2" android:pathData="M22,64 L86,64" />
+    <path android:fillColor="#00D2FF" android:pathData="M46,48 C46,43.582 49.582,40 54,40 C58.418,40 62,43.582 62,48 C62,54 54,63 54,63 C54,63 46,54 46,48 Z" />
+    <path android:fillColor="#0F1015" android:pathData="M51,48 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 Z" />
+    <path android:strokeColor="#EDEDED" android:strokeWidth="2.6" android:pathData="M32.8,44.3 h7.4 a1.5,1.5 0 0 1 1.5,1.5 v15.4 a1.5,1.5 0 0 1 -1.5,1.5 h-7.4 a1.5,1.5 0 0 1 -1.5,-1.5 v-15.4 a1.5,1.5 0 0 1 1.5,-1.5 Z" />
+    <path android:strokeColor="#EDEDED" android:strokeWidth="2.6" android:pathData="M31.3,59.4 h10.4" />
+    <path android:fillColor="#00D2FF" android:pathData="M35.90,40.50 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z M37.74,36.58 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z M40.12,34.62 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z M42.85,34.73 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z M45.70,37.00 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 Z" />
+    </group>
+</vector>

@@ -1,10 +1,12 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // "Send to Car": one APK for both ends. On the phone it adds "Send to car" to the
-// Share menu; on the head unit it runs a receiver that opens Waze.
+// Share menu; on the head unit it runs a receiver that opens Waze. The car screens are Compose
+// (works on the Android 8.1 unit); the phone screens stay plain Views.
 android {
     namespace = "com.nik.sendtocar"
     compileSdk = 34
@@ -15,8 +17,8 @@ android {
         targetSdk = 34
         // Bump both for every release: CI publishes v<versionName> when that tag doesn't exist yet,
         // and Obtainium updates from those releases.
-        versionCode = 5
-        versionName = "0.3.0"
+        versionCode = 6
+        versionName = "0.4.0"
     }
 
     // Release key comes from CI secrets (SIGNING_KEYSTORE_BASE64 / SIGNING_PASSWORD), never from git.
@@ -33,7 +35,10 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            // R8 keeps Compose small and quick on the head unit's slow CPU.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Without the key (forks, local builds) the release APK is debug-signed: fine to try, not to update.
             signingConfig = if (keystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
@@ -44,11 +49,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { buildConfig = true }
+    buildFeatures { buildConfig = true; compose = true }
     lint { abortOnError = false }
 }
 
 dependencies {
+    // Car screens.
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.3")
     // QR codes for the diagnostics report.
     implementation("com.google.zxing:core:3.5.3")
     // Phone side: Google's QR scanner (no camera permission; needs Play services, which phones have).
