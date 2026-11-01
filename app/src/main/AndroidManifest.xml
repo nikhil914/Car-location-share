@@ -73,7 +73,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:label="Send to car"
-            android:theme="@android:style/Theme.Material.Dialog">
+            android:theme="@android:style/Theme.Material.Dialog.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

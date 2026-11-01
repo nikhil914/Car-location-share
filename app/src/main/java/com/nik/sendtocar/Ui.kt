@@ -2,67 +2,47 @@ package com.nik.sendtocar
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
-import android.app.Activity
 import android.app.AlertDialog
+import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.InputType
-import android.view.View
-import android.widget.Button
-import android.widget.EditText
 import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
-
-/** Plain-View helpers for the phone screens. The car screens are Compose (CarUi.kt). */
-private fun Activity.dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
-private fun LinearLayout.label(s: String, size: Float = 16f, bold: Boolean = false): TextView =
-    TextView(context).apply {
-        text = s; textSize = size; setPadding(0, 8, 0, 8)
-        if (bold) setTypeface(typeface, Typeface.BOLD)
-    }.also { addView(it) }
-
-private fun LinearLayout.button(s: String, onClick: (Button) -> Unit): Button =
-    Button(context).apply { text = s; isAllCaps = false; setOnClickListener { onClick(this) } }.also { addView(it) }
 
 const val MAPS_PACKAGE = "com.google.android.apps.maps"
 
 private fun bg(f: () -> Unit) = Thread { try { f() } catch (e: Exception) { ProbeLog.i("Error: $e") } }.start()
 
+/**
+ * One activity for both ends. The car gets the dashboard (CarUi.kt); the phone gets its home
+ * screen (PhoneUi.kt); a fresh install asks which one this device is.
+ */
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: Prefs
-    private lateinit var root: LinearLayout
-    private lateinit var scroll: ScrollView
     private var carModel: CarModel? = null
-    private var statusView: TextView? = null
-    private var logView: TextView? = null
-    private var sendView: TextView? = null
+    private val phone = PhoneState()
     private val handler = Handler(Looper.getMainLooper())
     private val refresher = object : Runnable {
-        override fun run() { refresh(); handler.postDelayed(this, 2000) }
+        override fun run() { phone.tick = System.currentTimeMillis(); handler.postDelayed(this, 2000) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ProbeLog.init(this)
         prefs = Prefs(this)
-        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)) }
-        scroll = ScrollView(this).apply { addView(root) }
-        setContentView(scroll)
         if (!handlePairLink(intent)) build()
     }
 
@@ -82,10 +62,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun afterPairing() {
-        sendView?.text = "Paired. Looking for the car on Bluetooth and testing every channel…"
+        phone.sendTitle = "Paired. Looking for the car on Bluetooth and testing every channel…"
         Pairing.findCarBluetooth(this) { status ->
             ProbeLog.i("Car Bluetooth: $status")
-            if (!status.startsWith("scanning")) runOnUiThread { send(Msg.ping(prefs.phoneCode)) }
+            if (!status.startsWith("scanning")) runOnUiThread { send(Msg.ping(prefs.phoneCode), "Testing every channel") }
         }
     }
 
@@ -107,7 +87,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        ProbeLog.listener = { refreshLog() }
+        ProbeLog.listener = { phone.tick = System.currentTimeMillis() }
         handler.post(refresher)
         carModel?.resume()
     }
@@ -120,24 +100,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun build() {
-        root.removeAllViews()
-        statusView = null; logView = null; sendView = null
+        actionBar?.hide()
         if (prefs.role == Prefs.CAR) { buildCar(); return }
         carModel?.pause(); carModel = null
-        actionBar?.show()
-        if (scroll.parent == null) setContentView(scroll)
-        when (prefs.role) {
-            Prefs.CAR -> buildCar()
-            Prefs.PHONE -> buildPhone()
-            else -> buildChooser()
+        if (prefs.role == Prefs.PHONE) buildPhone()
+        else setContent {
+            RoleChooser(
+                onCar = { prefs.role = Prefs.CAR; CarService.start(this); build() },
+                onPhone = { prefs.role = Prefs.PHONE; build() },
+            )
         }
-    }
-
-    private fun buildChooser() {
-        root.label("Send to Car ${BuildConfig.VERSION_NAME}", 24f, true)
-        root.label("Install this same app on the car unit and on your phone, then pick what this device is.")
-        root.button("This is the CAR (head unit)") { prefs.role = Prefs.CAR; CarService.start(this); build() }
-        root.button("This is my PHONE") { prefs.role = Prefs.PHONE; build() }
     }
 
     private fun buildCar() {
@@ -149,7 +121,6 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
         wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.takeIf { it.isNotEmpty() }
             ?.let { requestPermissions(it.toTypedArray(), 1) }
-        actionBar?.hide()
         val model = carModel ?: CarModel(this).also { carModel = it }
         val actions = CarActions(
             testPopup = { CarService.start(this, CarService.ACTION_TEST_POPUP) },
@@ -166,73 +137,51 @@ class MainActivity : ComponentActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         carModel?.let { it.pause(); it.resume() }
+        phone.tick = System.currentTimeMillis()
     }
-
 
     private fun buildPhone() {
         val wanted = if (Build.VERSION.SDK_INT >= 31) listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
         else listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.takeIf { it.isNotEmpty() }
             ?.let { requestPermissions(it.toTypedArray(), 2) }
-        root.label("Send to Car: phone mode (probe ${BuildConfig.VERSION_NAME})", 22f, true)
-        root.label(if (prefs.phoneCode.length == 8) "Paired with car ${Prefs.pretty(prefs.phoneCode)}" else "Not paired yet", 18f, true)
-        root.button("Scan the car's QR code to pair") { scanQr() }
-        root.label("Or type the car's pairing code:")
-        val codeIn = EditText(this).apply {
-            setText(Prefs.pretty(prefs.phoneCode)); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-        }
-        root.addView(codeIn)
-        root.button("Save code") { prefs.phoneCode = codeIn.text.toString(); codeIn.setText(Prefs.pretty(prefs.phoneCode)); ProbeLog.i("Code saved") }
-        root.label("To send a place: in Google Maps, WhatsApp or Waze tap Share → Send to car.", 14f)
-        root.button("Send the copied link or address") {
-            val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
-            val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
-            if (text.isBlank()) Toast.makeText(this, "Nothing copied. Long-press a link and copy it first.", Toast.LENGTH_LONG).show()
-            else startActivity(Intent(this, ShareActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text))
-        }
-        root.label("Tapped Google Maps links open in Maps. To send them here instead:", 14f)
-        root.button("1. Google Maps → Open by default → turn OFF \"Open supported links\"") {
-            openAppLinkSettings(MAPS_PACKAGE)
-        }
-        root.button("2. Send to Car → Open by default → Add links (tick them all)") {
-            openAppLinkSettings(packageName)
-        }
-
-        root.label("Car's Bluetooth", 20f, true)
-        root.label("Bluetooth sends only to this device. Pick the name the car shows under Settings → Receiver.", 14f)
-        root.button(btLabel()) { b -> pickCarBluetooth { b.text = btLabel() } }
-        root.button("Test Bluetooth only") {
-            if (prefs.phoneCode.length != 8) { sendView?.text = "Enter the 8-character code from the car first."; return@button }
-            sendView?.text = "Bluetooth: …"
-            Sender(this).sendBluetooth(Msg.ping(prefs.phoneCode)) { s -> runOnUiThread { sendView?.text = "Bluetooth: $s" } }
-        }
-
-        root.label("Tests", 20f, true)
-        root.button("1. Ping the car on all channels") { send(Msg.ping(prefs.phoneCode)) }
-        root.button("2. Send a test place (Emirates Palace)") {
-            send(Msg.place(prefs.phoneCode, Place(24.4615, 54.3172, "Emirates Palace")))
-        }
-        sendView = root.label("", 15f)
-        root.button("3. Get the car's report (internet)") { b ->
-            b.text = "3. Fetching…"
-            bg {
-                val r = Report.fetchFromCar(prefs.phoneCode)
-                runOnUiThread {
-                    b.text = "3. Get the car's report (internet)"
-                    if (r == null) ProbeLog.i("No car report on the relay in the last hour") else shareText("Car report", r)
+        val actions = PhoneActions(
+            scanQr = { scanQr() },
+            saveCode = { code -> prefs.phoneCode = code; ProbeLog.i("Code saved"); phone.tick = System.currentTimeMillis() },
+            sendCopied = { sendCopied() },
+            pickBluetooth = { pickCarBluetooth { phone.tick = System.currentTimeMillis() } },
+            testBluetooth = { testBluetooth() },
+            mapsLinks = { openAppLinkSettings(MAPS_PACKAGE) },
+            ourLinks = { openAppLinkSettings(packageName) },
+            ping = { send(Msg.ping(prefs.phoneCode), "Ping on every channel") },
+            testPlace = { send(Msg.place(prefs.phoneCode, Place(24.4615, 54.3172, "Emirates Palace")), "Test place: Emirates Palace") },
+            carReport = { done ->
+                bg {
+                    val r = Report.fetchFromCar(prefs.phoneCode)
+                    runOnUiThread {
+                        done()
+                        if (r == null) ProbeLog.i("No car report on the relay in the last hour") else shareText("Car report", r)
+                    }
                 }
-            }
-        }
-        root.button("4. Share this phone's report") { shareText("Phone report", Report.build(this)) }
-        statusView = root.label("", 14f)
-        addFooter()
+            },
+            phoneReport = { shareText("Phone report", Report.build(this)) },
+            switchRole = { prefs.role = null; build() },
+        )
+        setContent { PhoneApp(phone, actions) }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun btLabel(): String {
-        val mac = prefs.lastBt ?: return "Choose the car's Bluetooth (not set)"
-        @Suppress("DEPRECATION") val name = try { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(mac)?.name } catch (e: Exception) { null }
-        return "Car's Bluetooth: ${name ?: mac} (tap to change)"
+    private fun sendCopied() {
+        val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
+        val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+        if (text.isBlank()) Toast.makeText(this, "Nothing copied. Long-press a link and copy it first.", Toast.LENGTH_LONG).show()
+        else startActivity(Intent(this, ShareActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text))
+    }
+
+    private fun testBluetooth() {
+        if (prefs.phoneCode.length != 8) { phone.sendTitle = "Pair with the car first."; return }
+        phone.sendTitle = "Bluetooth test"
+        phone.status = linkedMapOf(Sender.BT to "…")
+        Sender(this).sendBluetooth(Msg.ping(prefs.phoneCode)) { s -> runOnUiThread { phone.status = linkedMapOf(Sender.BT to s) } }
     }
 
     /** Lists the phone's paired devices; the one picked is the only one Bluetooth sends to. */
@@ -258,28 +207,12 @@ class MainActivity : ComponentActivity() {
             }.setNegativeButton("Cancel", null).show()
     }
 
-    private fun send(m: Msg) {
-        if (prefs.phoneCode.length != 8) { sendView?.text = "Enter the 8-character code from the car first."; return }
+    private fun send(m: Msg, title: String) {
+        if (prefs.phoneCode.length != 8) { phone.sendTitle = "Pair with the car first."; phone.status = emptyMap(); return }
+        phone.sendTitle = title
         val status = linkedMapOf(Sender.WIFI to "…", Sender.BT to "…", Sender.NET to "…")
-        fun render() { sendView?.text = status.entries.joinToString("\n") { "${it.key}: ${it.value}" } }
-        render()
-        Sender(this).send(m) { ch, s -> runOnUiThread { status[ch] = s; render() } }
-    }
-
-    private fun addFooter() {
-        root.label("Log", 20f, true)
-        logView = root.label("", 12f).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true) }
-        root.button("Switch role (car/phone)") { prefs.role = null; build() }
-        refresh()
-    }
-
-    private fun refresh() {
-        statusView?.text = Report.status(this).joinToString("\n")
-        refreshLog()
-    }
-
-    private fun refreshLog() {
-        logView?.text = ProbeLog.snapshot().takeLast(60).reversed().joinToString("\n")
+        phone.status = LinkedHashMap(status)
+        Sender(this).send(m) { ch, s -> runOnUiThread { status[ch] = s; phone.status = LinkedHashMap(status) } }
     }
 
     private fun showQr() {
@@ -312,30 +245,41 @@ class MainActivity : ComponentActivity() {
 }
 
 /** Phone side: Share → Send to car. Parses what was shared, sends it on every channel, shows each result. */
-class ShareActivity : Activity() {
+class ShareActivity : ComponentActivity() {
+    private var heading by mutableStateOf("Reading the place…")
+    private var status by mutableStateOf<Map<String, String>>(emptyMap())
+    private var notPaired by mutableStateOf(false)
+    private var deliveredAt by mutableLongStateOf(0L)
+    private val handler = Handler(Looper.getMainLooper())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ProbeLog.init(this)
         val prefs = Prefs(this)
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 24) }
-        setContentView(col)
-        val what = col.label("Reading the place…", 18f, true)
-        val status = col.label("", 15f)
-        col.button("Close") { finish() }
         // A tapped map link landed here: keep a way to look at it in Google Maps as before.
         val tapped = intent.data?.takeIf { intent.action == Intent.ACTION_VIEW && it.scheme?.startsWith("http") == true }
-        if (tapped != null) col.button("Open in Google Maps instead") {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, tapped).setPackage(MAPS_PACKAGE))
-            } catch (e: Exception) {
-                startActivity(Intent(Intent.ACTION_VIEW, tapped).addCategory(Intent.CATEGORY_BROWSABLE).setPackage("com.android.chrome"))
+        val openInMaps: (() -> Unit)? = tapped?.let { uri ->
+            {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(MAPS_PACKAGE))
+                } catch (e: Exception) {
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).setPackage("com.android.chrome"))
+                }
+                finish()
             }
-            finish()
+        }
+        setContent {
+            SendSheet(
+                heading, status, notPaired, deliveredAt > 0,
+                onClose = { finish() },
+                onOpenApp = { startActivity(Intent(this, MainActivity::class.java)); finish() },
+                onOpenInMaps = openInMaps,
+            )
         }
 
         if (prefs.phoneCode.length != 8) {
-            what.text = "Open Send to Car and enter the car's pairing code first."
-            col.button("Open Send to Car") { startActivity(Intent(this, MainActivity::class.java)); finish() }
+            heading = "Pair with the car first"
+            notPaired = true
             return
         }
         val shared = listOfNotNull(
@@ -345,13 +289,26 @@ class ShareActivity : Activity() {
         bg {
             val place = Http.placeFrom(shared)
             runOnUiThread {
-                if (place == null) { what.text = "No place found in what was shared."; status.visibility = View.GONE; return@runOnUiThread }
-                what.text = "Sending: ${place.label()}"
+                if (place == null) { heading = "No place found in what was shared"; return@runOnUiThread }
+                heading = place.label()
                 val st = linkedMapOf(Sender.WIFI to "…", Sender.BT to "…", Sender.NET to "…")
-                fun render() { status.text = st.entries.joinToString("\n") { "${it.key}: ${it.value}" } }
-                render()
-                Sender(this).send(Msg.place(prefs.phoneCode, place)) { ch, s -> runOnUiThread { st[ch] = s; render() } }
+                status = LinkedHashMap(st)
+                Sender(this).send(Msg.place(prefs.phoneCode, place)) { ch, s ->
+                    runOnUiThread {
+                        st[ch] = s; status = LinkedHashMap(st)
+                        // Delivered once is enough: close by itself shortly after, the other channels finish quietly.
+                        if (deliveredAt == 0L && s.startsWith("DELIVERED")) {
+                            deliveredAt = System.currentTimeMillis()
+                            handler.postDelayed({ if (!isFinishing) finish() }, 3500)
+                        }
+                    }
+                }
             }
         }
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 }

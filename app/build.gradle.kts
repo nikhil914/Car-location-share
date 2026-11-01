@@ -6,7 +6,7 @@ plugins {
 
 // "Send to Car": one APK for both ends. On the phone it adds "Send to car" to the
 // Share menu; on the head unit it runs a receiver that opens Waze. The car screens are Compose
-// (works on the Android 8.1 unit); the phone screens stay plain Views.
+// (works on the Android 8.1 unit); so are the phone screens.
 android {
     namespace = "com.nik.sendtocar"
     compileSdk = 34
@@ -17,8 +17,8 @@ android {
         targetSdk = 34
         // Bump both for every release: CI publishes v<versionName> when that tag doesn't exist yet,
         // and Obtainium updates from those releases.
-        versionCode = 7
-        versionName = "0.4.1"
+        versionCode = 8
+        versionName = "0.5.0"
     }
 
     // Release key comes from CI secrets (SIGNING_KEYSTORE_BASE64 / SIGNING_PASSWORD), never from git.
