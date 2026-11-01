@@ -55,6 +55,11 @@ The car side is Jetpack Compose (it runs on the Android 8.1 unit) with three sur
 Touch targets are at least 56 dp (64 dp for most buttons, 76 dp for Start navigation) with 16 dp
 gaps, and nothing on the dashboard scrolls.
 
+The phone screens use the same style and follow the phone's dark or light mode: a home screen
+with pairing, **Send the copied link**, per-channel delivery status, the car's Bluetooth choice,
+the map-link setup steps, and tests and diagnostics folded away. Share → Send to car shows a small
+sheet that closes itself a few seconds after the car confirms.
+
 ### Themes
 
 | Theme | Look |
