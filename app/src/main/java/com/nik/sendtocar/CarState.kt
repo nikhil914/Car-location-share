@@ -34,7 +34,7 @@ enum class ChannelKind(val label: String) { WIFI("Wi-Fi"), BLUETOOTH("Bluetooth"
 data class ChannelStatus(val kind: ChannelKind, val detail: String, val up: Boolean, val enabled: Boolean)
 
 sealed class ConnectionStatus {
-    /** The receiver service isn't running (it restarts itself within 15 min). */
+    /** The receiver service isn't running (the watchdog restarts it within a minute). */
     object Disconnected : ConnectionStatus()
     data class Listening(val channels: List<ChannelStatus>, val lastContactAt: Long, val lastContactVia: String) : ConnectionStatus() {
         val anyUp get() = channels.any { it.up }

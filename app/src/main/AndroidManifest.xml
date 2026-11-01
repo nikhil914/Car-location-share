@@ -143,6 +143,16 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <!-- Broadcasts Android 8 still delivers to stopped-listening apps, which a head unit
+                     sends when it wakes: clock set from GPS/network, Bluetooth links coming back. -->
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
+            </intent-filter>
+            <intent-filter>
+                <!-- USB stick or SD card mounted after wake. -->
+                <action android:name="android.intent.action.MEDIA_MOUNTED" />
+                <data android:scheme="file" />
             </intent-filter>
         </receiver>
         <receiver android:name=".WatchdogReceiver" android:exported="false" />
