@@ -257,12 +257,13 @@ class CarService : Service() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         ProbeLog.init(ctx)
-        ProbeLog.i("Broadcast: ${intent.action}")
-        if (Prefs(ctx).role == Prefs.CAR) CarService.start(ctx)
+        if (Prefs(ctx).role != Prefs.CAR || CarService.running) return
+        ProbeLog.i("Woken by ${intent.action}: starting the receiver")
+        CarService.start(ctx)
     }
 }
 
-/** Every 15 min: restart the service if the unit's task killer stopped it. */
+/** Every minute: restart the service if the unit's task killer stopped it (FYT kills apps when it sleeps). */
 class WatchdogReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         ProbeLog.init(ctx)
@@ -275,7 +276,8 @@ object Watchdog {
     fun arm(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = PendingIntent.getBroadcast(ctx, 0, Intent(ctx, WatchdogReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
-        am.setInexactRepeating(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_FIFTEEN_MINUTES,
-            AlarmManager.INTERVAL_FIFTEEN_MINUTES, pi)
+        // Not a wakeup alarm: it fires once the unit is awake again, so the receiver is back about a
+        // minute after ACC on even when no boot broadcast arrives.
+        am.setRepeating(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 60_000L, 60_000L, pi)
     }
 }

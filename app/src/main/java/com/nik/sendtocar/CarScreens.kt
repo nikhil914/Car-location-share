@@ -350,10 +350,20 @@ private fun ColumnScope.ReceiverPage(model: CarModel, actions: CarActions) {
         model.setChannel(ChannelKind.INTERNET, it)
     }
     InfoRow("Port ${Wire.PORT} is fixed: the phone searches the hotspot for it.")
+    Section("This unit's Bluetooth", "On the phone, pair with this name and choose it under Car's Bluetooth. " +
+        "The unit's phone-call Bluetooth may have a different name and won't work for this.")
+    InfoRow(btIdentity(), mono = true)
+    SecondaryButton("Make this unit visible for pairing (2 min)", CarIcons.Bluetooth, Modifier.fillMaxWidth()) {
+        try {
+            ctx.startActivity(android.content.Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+                .putExtra(android.bluetooth.BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { ProbeLog.i("Can't make Bluetooth visible: $e") }
+    }
     Section("Background")
     InfoRow(
         if (CarService.running) "Receiver running since ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(CarService.startedAt))}. " +
-            "It starts at boot and a watchdog restarts it every 15 min if the unit stops it."
+            "It starts at boot, and a watchdog brings it back within a minute if the unit stops it."
         else "Receiver is not running. Opening this screen starts it.",
     )
     val overlay = Overlay.allowed(ctx)
@@ -361,6 +371,16 @@ private fun ColumnScope.ReceiverPage(model: CarModel, actions: CarActions) {
         "Open the card over other apps", if (overlay) "Allowed (Display over other apps)" else "Off. Needed on Android 10 and newer, tap to allow", overlay,
     ) { actions.openOverlaySettings() }
 }
+
+@android.annotation.SuppressLint("MissingPermission")
+private fun btIdentity(): String = try {
+    @Suppress("DEPRECATION") val a = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+    when {
+        a == null -> "No Android Bluetooth on this unit: Bluetooth sending can't work, use Wi-Fi or internet."
+        !a.isEnabled -> "Bluetooth is off (name \"${a.name}\")"
+        else -> "Name: \"${a.name}\", paired: ${a.bondedDevices?.joinToString { it.name ?: it.address }?.ifBlank { "none" } ?: "?"}"
+    }
+} catch (e: Exception) { "Bluetooth: $e" }
 
 // ---- Navigation automation
 

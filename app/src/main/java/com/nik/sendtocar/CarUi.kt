@@ -198,7 +198,7 @@ private fun DebugStrip(status: ConnectionStatus) {
         color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-            if (status !is ConnectionStatus.Listening) Text("The receiver service is not running. It restarts within 15 minutes, or open Settings.")
+            if (status !is ConnectionStatus.Listening) Text("The receiver service is not running. It comes back within a minute, or open Settings.")
             else {
                 for (ch in status.channels) Text(
                     "${ch.kind.label}: ${ch.detail}", style = MaterialTheme.typography.labelMedium,
