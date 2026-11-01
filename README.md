@@ -30,7 +30,7 @@ first and ignores the rest.
 | Channel | How |
 | --- | --- |
 | Wi-Fi | The car runs an HTTP server on port 47800. The phone tries the last known IP, then sweeps its local /24 networks (the hotspot). |
-| Bluetooth | The car listens on an insecure RFCOMM socket. The phone tries each paired device. |
+| Bluetooth | The car listens on an RFCOMM socket. The phone connects only to the device chosen under **Car's Bluetooth** (the car shows its Android Bluetooth name under Settings → Receiver). |
 | Internet | An ntfy.sh topic named from the pairing code. The car acknowledges on `<topic>-ack` and catches up on places from the last 12 h. |
 
 A place sent as a text file by Bluetooth file transfer can also be read on the car (car test 3).

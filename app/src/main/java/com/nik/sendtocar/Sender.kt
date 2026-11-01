@@ -86,7 +86,13 @@ class Sender(ctx: Context) {
             .map { it.hostAddress!!.substringBeforeLast('.') }.distinct()
     }
 
-    // ---- Bluetooth: RFCOMM to each paired device, the one that worked last time first.
+    /** Bluetooth only, for the phone screen's Bluetooth test. */
+    fun sendBluetooth(m: Msg, onStatus: (String) -> Unit) {
+        val body = m.toJson()
+        Thread { onStatus(safe { bt(body, onStatus) }) }.start()
+    }
+
+    // ---- Bluetooth: RFCOMM to the one device chosen as the car (or found from the pairing QR).
 
     @SuppressLint("MissingPermission")
     private fun bt(body: String, progress: (String) -> Unit): String {
@@ -96,24 +102,26 @@ class Sender(ctx: Context) {
             ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) return "Bluetooth permission not granted (open Send to Car once)"
         if (!adapter.isEnabled) return "Bluetooth is off"
-        // The car from the pairing QR first (no system pairing needed for an insecure socket), then paired devices.
-        val known = prefs.lastBt?.let { mac -> try { adapter.getRemoteDevice(mac) } catch (e: Exception) { null } }
-        val devices = (listOfNotNull(known) + adapter.bondedDevices.orEmpty().filter { it.address != prefs.lastBt })
-        if (devices.isEmpty()) return "no paired devices and no car address from the QR"
+        // Only the car: walking every paired device took minutes and still missed it.
+        val d = prefs.lastBt?.let { mac -> try { adapter.getRemoteDevice(mac) } catch (e: Exception) { null } }
+            ?: return "car's Bluetooth not chosen (Send to Car → Car's Bluetooth)"
+        val name = d.name ?: d.address
         adapter.cancelDiscovery()
-        for (d in devices) {
-            progress("trying ${d.name}…")
+        var last: Exception? = null
+        // Insecure first (no pairing needed), then the paired (secure) link some stacks insist on.
+        for (secure in listOf(false, true)) {
+            progress("connecting to $name${if (secure) " (paired link)" else ""}…")
             try {
-                d.createInsecureRfcommSocketToServiceRecord(Wire.BT_UUID).use { s ->
+                (if (secure) d.createRfcommSocketToServiceRecord(Wire.BT_UUID) else d.createInsecureRfcommSocketToServiceRecord(Wire.BT_UUID)).use { s ->
                     s.connect()
                     s.outputStream.write((body + "\n").toByteArray()); s.outputStream.flush()
                     val reply = BufferedReader(InputStreamReader(s.inputStream, Charsets.UTF_8)).readLine()
-                    prefs.lastBt = d.address
-                    return verdict(reply?.trim(), d.name ?: d.address, t0) ?: "no reply from ${d.name}"
+                    return verdict(reply?.trim(), name, t0) ?: "connected to $name but it didn't answer"
                 }
-            } catch (e: Exception) { /* not the car, or the car isn't listening: try the next one */ }
+            } catch (e: Exception) { last = e }
         }
-        return "car not reachable (tried ${devices.size} paired devices)"
+        ProbeLog.i("Bluetooth to $name failed: $last")
+        return "$name didn't accept the connection (${last?.message ?: last}). Is Send to Car running on the car, and is this the car's own Bluetooth?"
     }
 
     // ---- Internet relay (ntfy.sh): publish, then wait for the car's acknowledgement.
