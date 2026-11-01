@@ -93,8 +93,19 @@ object Touch {
  * Applies a [Palette] as the Material colour scheme. Flat by design: no gradients, no shadows,
  * hierarchy comes from type size and one accent colour.
  */
+/** Phone sizes: the Material defaults, with bolder headings. */
+private val PhoneType = Typography().let { t ->
+    t.copy(
+        headlineSmall = t.headlineSmall.copy(fontWeight = FontWeight.Bold),
+        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        labelMedium = t.labelMedium.copy(fontFamily = FontFamily.Monospace),
+        labelSmall = t.labelSmall.copy(letterSpacing = 1.sp),
+    )
+}
+
 @Composable
-fun CarTheme(palette: Palette, content: @Composable () -> Unit) {
+fun CarTheme(palette: Palette, phone: Boolean = false, content: @Composable () -> Unit) {
     val scheme = if (palette.dark) darkColorScheme(
         primary = palette.accent.c(), onPrimary = palette.onAccent.c(),
         background = palette.background.c(), onBackground = palette.text.c(),
@@ -112,7 +123,7 @@ fun CarTheme(palette: Palette, content: @Composable () -> Unit) {
         secondaryContainer = palette.raised.c(), onSecondaryContainer = palette.text.c(),
         error = palette.bad.c(),
     )
-    MaterialTheme(colorScheme = scheme, typography = CarType, shapes = CarShapes) {
+    MaterialTheme(colorScheme = scheme, typography = if (phone) PhoneType else CarType, shapes = CarShapes) {
         CompositionLocalProvider(LocalPalette provides palette, LocalContentColor provides palette.text.c()) { content() }
     }
 }
