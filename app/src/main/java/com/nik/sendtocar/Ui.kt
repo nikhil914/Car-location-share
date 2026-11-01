@@ -1,6 +1,8 @@
 package com.nik.sendtocar
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -196,6 +198,15 @@ class MainActivity : ComponentActivity() {
             openAppLinkSettings(packageName)
         }
 
+        root.label("Car's Bluetooth", 20f, true)
+        root.label("Bluetooth sends only to this device. Pick the name the car shows under Settings → Receiver.", 14f)
+        root.button(btLabel()) { b -> pickCarBluetooth { b.text = btLabel() } }
+        root.button("Test Bluetooth only") {
+            if (prefs.phoneCode.length != 8) { sendView?.text = "Enter the 8-character code from the car first."; return@button }
+            sendView?.text = "Bluetooth: …"
+            Sender(this).sendBluetooth(Msg.ping(prefs.phoneCode)) { s -> runOnUiThread { sendView?.text = "Bluetooth: $s" } }
+        }
+
         root.label("Tests", 20f, true)
         root.button("1. Ping the car on all channels") { send(Msg.ping(prefs.phoneCode)) }
         root.button("2. Send a test place (Emirates Palace)") {
@@ -215,6 +226,36 @@ class MainActivity : ComponentActivity() {
         root.button("4. Share this phone's report") { shareText("Phone report", Report.build(this)) }
         statusView = root.label("", 14f)
         addFooter()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun btLabel(): String {
+        val mac = prefs.lastBt ?: return "Choose the car's Bluetooth (not set)"
+        @Suppress("DEPRECATION") val name = try { BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(mac)?.name } catch (e: Exception) { null }
+        return "Car's Bluetooth: ${name ?: mac} (tap to change)"
+    }
+
+    /** Lists the phone's paired devices; the one picked is the only one Bluetooth sends to. */
+    @SuppressLint("MissingPermission")
+    private fun pickCarBluetooth(done: () -> Unit) {
+        @Suppress("DEPRECATION") val a = BluetoothAdapter.getDefaultAdapter()
+        if (a == null) { Toast.makeText(this, "No Bluetooth on this phone", Toast.LENGTH_LONG).show(); return }
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN), 2); return
+        }
+        val devices = try { a.bondedDevices.orEmpty().sortedBy { it.name ?: it.address } } catch (e: Exception) { emptyList() }
+        val carName = prefs.carBtName
+        val labels = devices.map { d -> (d.name ?: d.address) + if (carName != null && d.name == carName) "  ← name from the car's QR" else "" } +
+            "Not listed: open Bluetooth settings to pair the car"
+        AlertDialog.Builder(this).setTitle("Which device is the car?")
+            .setItems(labels.toTypedArray()) { _, i ->
+                if (i == devices.size) startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS))
+                else {
+                    prefs.lastBt = devices[i].address
+                    ProbeLog.i("Car's Bluetooth set to ${devices[i].name} ${devices[i].address}")
+                }
+                done()
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun send(m: Msg) {
